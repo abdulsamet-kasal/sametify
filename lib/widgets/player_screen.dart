@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/player_provider.dart';
+import 'song_action_bottom_sheet.dart';
 
 class PlayerScreen extends ConsumerWidget {
   const PlayerScreen({super.key});
@@ -27,6 +28,7 @@ class PlayerScreen extends ConsumerWidget {
     }
 
     final isFav = ref.watch(favoritesProvider.notifier).isFavorite(song.id);
+    final isDownloaded = ref.watch(downloadsProvider.notifier).isDownloaded(song.id);
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -50,7 +52,7 @@ class PlayerScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              song.album.isNotEmpty ? song.album : 'Sametify',
+              song.album.isNotEmpty ? song.album : 'Sametify Music',
               style: const TextStyle(
                 fontSize: 12,
                 color: Colors.white,
@@ -63,13 +65,19 @@ class PlayerScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),
-            onPressed: () {},
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                builder: (_) => SongActionBottomSheet(song: song),
+              );
+            },
           ),
         ],
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -78,8 +86,8 @@ class PlayerScreen extends ConsumerWidget {
                 child: Hero(
                   tag: 'current_artwork',
                   child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    height: MediaQuery.of(context).size.width * 0.8,
+                    width: MediaQuery.of(context).size.width * 0.82,
+                    height: MediaQuery.of(context).size.width * 0.82,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
@@ -106,7 +114,7 @@ class PlayerScreen extends ConsumerWidget {
                 ),
               ),
 
-              // Title, Artist, Favorite
+              // Title, Artist, Download Badge, Favorite
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -114,15 +122,29 @@ class PlayerScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          song.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                song.title,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isDownloaded) ...[
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.download_done,
+                                color: Color(0xFF1DB954),
+                                size: 20,
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(
@@ -137,15 +159,53 @@ class PlayerScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      color: isFav ? const Color(0xFF1DB954) : Colors.white,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      ref.read(favoritesProvider.notifier).toggleFavorite(song);
-                    },
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          isDownloaded ? Icons.download_done : Icons.download_outlined,
+                          color: isDownloaded ? const Color(0xFF1DB954) : Colors.white70,
+                          size: 26,
+                        ),
+                        tooltip: isDownloaded ? 'İndirildi' : 'İndir',
+                        onPressed: () async {
+                          if (isDownloaded) {
+                            await ref.read(downloadsProvider.notifier).removeDownload(song.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('İndirilenlerden silindi')),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Şarkı çevrimdışı için indiriliyor...')),
+                            );
+                            final success = await ref.read(downloadsProvider.notifier).downloadSingleSong(song);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    success
+                                        ? 'İndirme tamamlandı! İnternetsiz dinleyebilirsiniz.'
+                                        : 'İndirme başarısız oldu.',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isFav ? Icons.favorite : Icons.favorite_border,
+                          color: isFav ? const Color(0xFF1DB954) : Colors.white,
+                          size: 28,
+                        ),
+                        onPressed: () {
+                          ref.read(favoritesProvider.notifier).toggleFavorite(song);
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -231,18 +291,29 @@ class PlayerScreen extends ConsumerWidget {
                       ref.read(playerProvider.notifier).togglePlayPause();
                     },
                     child: Container(
-                      width: 64,
-                      height: 64,
+                      width: 66,
+                      height: 66,
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        playerState.isPlaying
-                            ? Icons.pause
-                            : Icons.play_arrow_rounded,
-                        color: Colors.black,
-                        size: 38,
+                      child: Center(
+                        child: playerState.isLoading
+                            ? const SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : Icon(
+                                playerState.isPlaying
+                                    ? Icons.pause
+                                    : Icons.play_arrow_rounded,
+                                color: Colors.black,
+                                size: 40,
+                              ),
                       ),
                     ),
                   ),

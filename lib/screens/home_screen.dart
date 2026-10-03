@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/song.dart';
 import '../providers/player_provider.dart';
+import 'settings_screen.dart';
+import 'history_screen.dart';
+import '../widgets/song_action_bottom_sheet.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -10,6 +13,7 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chartAsync = ref.watch(chartTracksProvider);
+    final history = ref.watch(historyProvider);
 
     return Scaffold(
       body: CustomScrollView(
@@ -18,9 +22,9 @@ class HomeScreen extends ConsumerWidget {
             floating: true,
             pinned: false,
             expandedHeight: 70,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 16, bottom: 12),
-              title: const Text(
+            flexibleSpace: const FlexibleSpaceBar(
+              titlePadding: EdgeInsets.only(left: 16, bottom: 12),
+              title: Text(
                 'Günaydın Samet',
                 style: TextStyle(
                   fontSize: 22,
@@ -32,11 +36,23 @@ class HomeScreen extends ConsumerWidget {
             actions: [
               IconButton(
                 icon: const Icon(Icons.history_rounded),
-                onPressed: () {},
+                tooltip: 'Son Çalınanlar',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                  );
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
-                onPressed: () {},
+                tooltip: 'Ayarlar',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                },
               ),
               const SizedBox(width: 8),
             ],
@@ -47,6 +63,32 @@ class HomeScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Son Dinlenenler Yatay Liste (Varsa)
+                  if (history.isNotEmpty) ...[
+                    const Text(
+                      'Son Çalınanlar',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 190,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: history.length > 8 ? 8 : history.length,
+                        itemBuilder: (context, index) {
+                          final song = history[index];
+                          return _buildSongCard(context, ref, song, history, index);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Bugünün En Çok Dinlenenleri
                   const Text(
                     'Bugünün En Çok Dinlenenleri',
                     style: TextStyle(
@@ -62,7 +104,7 @@ class HomeScreen extends ConsumerWidget {
                         return const Center(child: Text('Şarkı bulunamadı'));
                       }
                       return SizedBox(
-                        height: 210,
+                        height: 200,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           itemCount: songs.length > 10 ? 10 : songs.length,
@@ -85,9 +127,10 @@ class HomeScreen extends ConsumerWidget {
                       child: Text('Hata: $err'),
                     ),
                   ),
+
                   const SizedBox(height: 24),
                   const Text(
-                    'Popüler Müzikler',
+                    'Senin İçin Popüler Müzikler',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -110,6 +153,7 @@ class HomeScreen extends ConsumerWidget {
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
                   ),
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
@@ -131,7 +175,7 @@ class HomeScreen extends ConsumerWidget {
         ref.read(playerProvider.notifier).playSong(song, queue: queue, index: index);
       },
       child: Container(
-        width: 140,
+        width: 135,
         margin: const EdgeInsets.only(right: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,12 +184,12 @@ class HomeScreen extends ConsumerWidget {
               borderRadius: BorderRadius.circular(8),
               child: CachedNetworkImage(
                 imageUrl: song.artworkUrl,
-                width: 140,
-                height: 140,
+                width: 135,
+                height: 135,
                 fit: BoxFit.cover,
                 errorWidget: (_, __, ___) => Container(
-                  width: 140,
-                  height: 140,
+                  width: 135,
+                  height: 135,
                   color: Colors.grey[800],
                   child: const Icon(Icons.music_note, color: Colors.white),
                 ),
@@ -191,7 +235,7 @@ class HomeScreen extends ConsumerWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         child: CachedNetworkImage(
           imageUrl: song.artworkUrl,
           width: 50,
@@ -225,7 +269,13 @@ class HomeScreen extends ConsumerWidget {
       ),
       trailing: IconButton(
         icon: const Icon(Icons.more_vert, color: Colors.grey),
-        onPressed: () {},
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: Colors.transparent,
+            builder: (_) => SongActionBottomSheet(song: song),
+          );
+        },
       ),
       onTap: () {
         ref.read(playerProvider.notifier).playSong(song, queue: queue, index: index);
