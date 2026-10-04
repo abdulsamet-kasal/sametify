@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/song.dart';
@@ -66,32 +66,32 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
   PlayerStateModel build() {
     _audioPlayer = AudioPlayer();
 
-    // Ses yönetimi optimize et
-    _audioPlayer.setReleaseMode(ReleaseMode.stop);
-
-    _audioPlayer.onPlayerStateChanged.listen((stateChanged) {
+    _audioPlayer.playerStateStream.listen((playerState) {
+      final isPlaying = playerState.playing;
+      final processingState = playerState.processingState;
+      
       state = state.copyWith(
-        isPlaying: stateChanged == PlayerState.playing,
-        isLoading: false,
+        isPlaying: isPlaying,
+        isLoading: processingState == ProcessingState.loading || processingState == ProcessingState.buffering,
       );
-    });
 
-    _audioPlayer.onPositionChanged.listen((pos) {
-      state = state.copyWith(position: pos);
-    });
-
-    _audioPlayer.onDurationChanged.listen((dur) {
-      if (dur > Duration.zero) {
-        state = state.copyWith(duration: dur);
+      if (processingState == ProcessingState.completed) {
+        if (state.isRepeat) {
+          seek(Duration.zero);
+          resume();
+        } else {
+          next();
+        }
       }
     });
 
-    _audioPlayer.onPlayerComplete.listen((_) {
-      if (state.isRepeat) {
-        seek(Duration.zero);
-        resume();
-      } else {
-        next();
+    _audioPlayer.positionStream.listen((pos) {
+      state = state.copyWith(position: pos);
+    });
+
+    _audioPlayer.durationStream.listen((dur) {
+      if (dur != null && dur > Duration.zero) {
+        state = state.copyWith(duration: dur);
       }
     });
 
@@ -124,7 +124,8 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
       final downloadedSongs = ref.read(downloadsProvider);
       final localMatch = downloadedSongs.where((s) => s.id == song.id).firstOrNull;
       if (localMatch != null && localMatch.isDownloaded) {
-        await _audioPlayer.play(DeviceFileSource(localMatch.localFilePath!));
+        await _audioPlayer.setFilePath(localMatch.localFilePath!);
+        await _audioPlayer.play();
         state = state.copyWith(isLoading: false);
         _saveToHistory(song);
         return;
@@ -133,15 +134,17 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
       // 2. Tam sürüm YouTube akış URL'sini çek
       final streamUrl = await MusicService.getFullAudioStreamUrl(song);
       if (streamUrl != null && streamUrl.isNotEmpty) {
-        await _audioPlayer.play(UrlSource(streamUrl));
+        await _audioPlayer.setUrl(streamUrl);
+        await _audioPlayer.play();
         state = state.copyWith(isLoading: false);
         _saveToHistory(song);
         return;
       }
 
-      // 3. Youtube'dan akış alınamadıysa fallback Deezer preview (İsteğe bağlı, istenirse hata verilebilir)
+      // 3. Youtube'dan akış alınamadıysa fallback Deezer preview
       if (song.audioUrl.isNotEmpty) {
-        await _audioPlayer.play(UrlSource(song.audioUrl));
+        await _audioPlayer.setUrl(song.audioUrl);
+        await _audioPlayer.play();
         state = state.copyWith(isLoading: false, errorMsg: "Tam sürüm bulunamadı, önizleme oynatılıyor");
         _saveToHistory(song);
       } else {
@@ -161,7 +164,7 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
   }
 
   Future<void> resume() async {
-    await _audioPlayer.resume();
+    await _audioPlayer.play();
   }
 
   Future<void> togglePlayPause() async {
