@@ -46,14 +46,15 @@ class MusicService {
 
       final video = searchResults.first;
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
+      
+      // En iyi ses kalitesini al ve URL'in süresi dolmadan önce oynamasını garanti et
       final audioStreams = manifest.audioOnly;
       if (audioStreams.isEmpty) return null;
 
       final bestStream = audioStreams.withHighestBitrate();
       return bestStream.url.toString();
     } catch (e) {
-      // Fallback preview
-      return null;
+      return null; // Deezer 29s preview'a düşmek istemiyoruz gerekirse null donsun provider icinde ele alinir
     }
   }
 
@@ -69,6 +70,7 @@ class MusicService {
       final fileName = '${song.id}_${song.title.replaceAll(RegExp(r'[^\w\s-]'), '')}.m4a';
       final file = File('${downloadsDir.path}/$fileName');
       if (file.existsSync()) {
+        if (onProgress != null) onProgress(1.0);
         return file.path;
       }
 

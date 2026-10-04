@@ -17,6 +17,7 @@ class PlayerStateModel {
   final int currentIndex;
   final bool isShuffle;
   final bool isRepeat;
+  final String? errorMsg;
 
   PlayerStateModel({
     this.currentSong,
@@ -28,6 +29,7 @@ class PlayerStateModel {
     this.currentIndex = -1,
     this.isShuffle = false,
     this.isRepeat = false,
+    this.errorMsg,
   });
 
   PlayerStateModel copyWith({
@@ -40,6 +42,7 @@ class PlayerStateModel {
     int? currentIndex,
     bool? isShuffle,
     bool? isRepeat,
+    String? errorMsg,
   }) {
     return PlayerStateModel(
       currentSong: currentSong ?? this.currentSong,
@@ -51,6 +54,7 @@ class PlayerStateModel {
       currentIndex: currentIndex ?? this.currentIndex,
       isShuffle: isShuffle ?? this.isShuffle,
       isRepeat: isRepeat ?? this.isRepeat,
+      errorMsg: errorMsg,
     );
   }
 }
@@ -61,6 +65,9 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
   @override
   PlayerStateModel build() {
     _audioPlayer = AudioPlayer();
+
+    // Ses yönetimi optimize et
+    _audioPlayer.setReleaseMode(ReleaseMode.stop);
 
     _audioPlayer.onPlayerStateChanged.listen((stateChanged) {
       state = state.copyWith(
@@ -104,8 +111,10 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
       queue: newQueue,
       currentIndex: newIndex >= 0 ? newIndex : 0,
       position: Duration.zero,
+      // Eğer YouTube'dan alınırsa duration tekrar güncellenecek
       duration: Duration(seconds: song.durationSeconds),
       isLoading: true,
+      errorMsg: null,
     );
 
     try {
@@ -130,14 +139,16 @@ class AudioPlayerNotifier extends Notifier<PlayerStateModel> {
         return;
       }
 
-      // 3. Bulunamazsa Deezer preview fallback
+      // 3. Youtube'dan akış alınamadıysa fallback Deezer preview (İsteğe bağlı, istenirse hata verilebilir)
       if (song.audioUrl.isNotEmpty) {
         await _audioPlayer.play(UrlSource(song.audioUrl));
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(isLoading: false, errorMsg: "Tam sürüm bulunamadı, önizleme oynatılıyor");
         _saveToHistory(song);
+      } else {
+        state = state.copyWith(isLoading: false, errorMsg: "Oynatılabilir kaynak bulunamadı.");
       }
     } catch (e) {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, errorMsg: "Şarkı çalınırken hata oluştu.");
     }
   }
 
