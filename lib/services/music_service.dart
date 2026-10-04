@@ -47,14 +47,19 @@ class MusicService {
       final video = searchResults.first;
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
       
-      // En iyi ses kalitesini al ve URL'in süresi dolmadan önce oynamasını garanti et
-      final audioStreams = manifest.audioOnly;
-      if (audioStreams.isEmpty) return null;
+      if (manifest.audioOnly.isEmpty) {
+        if(manifest.muxed.isNotEmpty){
+           final bestMuxed = manifest.muxed.withHighestBitrate();
+           return bestMuxed.url.toString();
+        }
+        return null;
+      }
 
-      final bestStream = audioStreams.withHighestBitrate();
+      final bestStream = manifest.audioOnly.withHighestBitrate();
       return bestStream.url.toString();
     } catch (e) {
-      return null; // Deezer 29s preview'a düşmek istemiyoruz gerekirse null donsun provider icinde ele alinir
+      // Stream alma hatası yoksayıldı.
+      return null; 
     }
   }
 
@@ -80,10 +85,16 @@ class MusicService {
 
       final video = searchResults.first;
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
-      final audioStreams = manifest.audioOnly;
-      if (audioStreams.isEmpty) return null;
+      
+      StreamInfo? streamInfo;
+      if (manifest.audioOnly.isNotEmpty) {
+        streamInfo = manifest.audioOnly.withHighestBitrate();
+      } else if (manifest.muxed.isNotEmpty) {
+        streamInfo = manifest.muxed.withHighestBitrate();
+      }
 
-      final streamInfo = audioStreams.withHighestBitrate();
+      if (streamInfo == null) return null;
+
       final stream = _yt.videos.streamsClient.get(streamInfo);
 
       final fileStream = file.openWrite();
@@ -102,6 +113,7 @@ class MusicService {
 
       return file.path;
     } catch (e) {
+      // İndirme hatası yoksayıldı.
       return null;
     }
   }
